@@ -8,6 +8,8 @@ final class OverlayWindowController {
     private var transcriptLabel: NSTextField?
     private var contentView: NSView?
     private var isShowing = false
+    private let labelFont = NSFont.systemFont(ofSize: 15, weight: .medium)
+    private var lastTranscriptionText = ""
 
     private let capsuleHeight: CGFloat = 56
     private let cornerRadius: CGFloat = 28
@@ -77,6 +79,8 @@ final class OverlayWindowController {
     func updateTranscription(_ text: String) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, self.isShowing else { return }
+            guard text != self.lastTranscriptionText else { return }
+            self.lastTranscriptionText = text
             self.transcriptLabel?.stringValue = text
 
             // Calculate needed width
@@ -122,6 +126,7 @@ final class OverlayWindowController {
         }) { [weak self] in
             self?.panel?.setIsVisible(false)
             self?.transcriptLabel?.stringValue = ""
+            self?.lastTranscriptionText = ""
             self?.transcriptLabel?.textColor = NSColor.labelColor
             if let cv = self?.panel?.contentView {
                 cv.layer?.removeAllAnimations()
@@ -212,8 +217,7 @@ final class OverlayWindowController {
     }
 
     private func measureTextWidth(_ text: String) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 15, weight: .medium)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font]
+        let attrs: [NSAttributedString.Key: Any] = [.font: labelFont]
         let size = (text as NSString).size(withAttributes: attrs)
         return ceil(size.width)
     }

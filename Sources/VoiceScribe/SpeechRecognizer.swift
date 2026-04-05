@@ -109,7 +109,9 @@ final class SpeechRecognizer {
             return
         }
 
-        TextInjector.shared.inject(text: trimmed)
+        DispatchQueue.global(qos: .userInitiated).async {
+            TextInjector.shared.inject(text: trimmed)
+        }
         OverlayWindowController.shared.hide()
     }
 

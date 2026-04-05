@@ -18,9 +18,11 @@ final class WaveformView: NSView {
     // Random jitter seeds (stable per bar)
     private var jitterPhases: [Double]
 
-    private var displayLink: CVDisplayLink?
+    private var animationLink: CADisplayLink?
     private var barLayers: [CALayer] = []
     private var isAnimating = false
+    private var cachedStartX: CGFloat = 0
+    private var cachedTotalWidth: CGFloat = 0
 
     private let attackCoeff: Float = 0.40
     private let releaseCoeff: Float = 0.15
@@ -40,11 +42,11 @@ final class WaveformView: NSView {
         layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
         barLayers = []
 
-        let totalWidth = CGFloat(barCount) * barWidth + CGFloat(barCount - 1) * barSpacing
-        let startX = (bounds.width - totalWidth) / 2
+        cachedTotalWidth = CGFloat(barCount) * barWidth + CGFloat(barCount - 1) * barSpacing
+        cachedStartX = (bounds.width - cachedTotalWidth) / 2
 
         for i in 0..<barCount {
-            let x = startX + CGFloat(i) * (barWidth + barSpacing)
+            let x = cachedStartX + CGFloat(i) * (barWidth + barSpacing)
             let barLayer = CALayer()
             barLayer.cornerRadius = barWidth / 2
             barLayer.backgroundColor = NSColor.white.withAlphaComponent(0.9).cgColor
@@ -84,31 +86,19 @@ final class WaveformView: NSView {
     }
 
     private func startDisplayLink() {
-        var displayLinkRef: CVDisplayLink?
-        CVDisplayLinkCreateWithActiveCGDisplays(&displayLinkRef)
-        guard let dl = displayLinkRef else { return }
-
-        let callback: CVDisplayLinkOutputCallback = { _, _, _, _, _, userInfo in
-            guard let userInfo = userInfo else { return kCVReturnSuccess }
-            let waveform = Unmanaged<WaveformView>.fromOpaque(userInfo).takeUnretainedValue()
-            waveform.tick()
-            return kCVReturnSuccess
-        }
-
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        CVDisplayLinkSetOutputCallback(dl, callback, selfPtr)
-        CVDisplayLinkStart(dl)
-        self.displayLink = dl
+        animationLink = window?.displayLink(target: self, selector: #selector(tick))
+            ?? NSScreen.main?.displayLink(target: self, selector: #selector(tick))
+        animationLink?.add(to: .main, forMode: .default)
     }
 
     private func stopDisplayLink() {
-        if let dl = displayLink {
-            CVDisplayLinkStop(dl)
-        }
-        displayLink = nil
+        animationLink?.invalidate()
+        animationLink = nil
     }
 
-    private func tick() {
+    @objc private func tick() {
+        guard isAnimating else { return }
+
         // Smooth RMS with attack/release envelope
         if targetRMS > currentRMS {
             currentRMS = currentRMS + attackCoeff * (targetRMS - currentRMS)
@@ -118,40 +108,29 @@ final class WaveformView: NSView {
 
         let time = CACurrentMediaTime()
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self, self.isAnimating else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
 
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
+        for i in 0..<barCount {
+            let weight = weights[i]
 
-            let totalWidth = CGFloat(self.barCount) * self.barWidth + CGFloat(self.barCount - 1) * self.barSpacing
-            let startX = (self.bounds.width - totalWidth) / 2
-
-            for i in 0..<self.barCount {
-                // Apply per-bar weight
-                let weight = self.weights[i]
-
-                // Smooth per-bar level with attack/release
-                let barTarget = self.currentRMS * weight
-                if barTarget > self.smoothedLevels[i] {
-                    self.smoothedLevels[i] = self.smoothedLevels[i] + self.attackCoeff * (barTarget - self.smoothedLevels[i])
-                } else {
-                    self.smoothedLevels[i] = self.smoothedLevels[i] + self.releaseCoeff * (barTarget - self.smoothedLevels[i])
-                }
-
-                // Add organic jitter: ±4% of max height, slow oscillation
-                let jitter = Float(sin(time * 3.7 + self.jitterPhases[i]) * 0.04)
-                let level = max(0, min(1.0, self.smoothedLevels[i] + jitter))
-
-                let barHeight = self.minBarHeight + CGFloat(level) * (self.maxBarHeight - self.minBarHeight)
-                let x = startX + CGFloat(i) * (self.barWidth + self.barSpacing)
-                let y = (self.bounds.height - barHeight) / 2
-
-                self.barLayers[i].frame = CGRect(x: x, y: y, width: self.barWidth, height: barHeight)
+            let barTarget = currentRMS * weight
+            if barTarget > smoothedLevels[i] {
+                smoothedLevels[i] = smoothedLevels[i] + attackCoeff * (barTarget - smoothedLevels[i])
+            } else {
+                smoothedLevels[i] = smoothedLevels[i] + releaseCoeff * (barTarget - smoothedLevels[i])
             }
 
-            CATransaction.commit()
+            let jitter = Float(sin(time * 3.7 + jitterPhases[i]) * 0.04)
+            let level = max(0, min(1.0, smoothedLevels[i] + jitter))
+
+            let barHeight = minBarHeight + CGFloat(level) * (maxBarHeight - minBarHeight)
+            let y = (bounds.height - barHeight) / 2
+
+            barLayers[i].frame = CGRect(x: cachedStartX + CGFloat(i) * (barWidth + barSpacing), y: y, width: barWidth, height: barHeight)
         }
+
+        CATransaction.commit()
     }
 
     override func layout() {

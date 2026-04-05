@@ -1,3 +1,4 @@
+import Accelerate
 import AppKit
 import AVFoundation
 import Speech
@@ -60,7 +61,6 @@ final class AudioRecorder {
 
         isRecording = false
         rmsLevel = 0.0
-
         if tapInstalled {
             audioEngine.inputNode.removeTap(onBus: 0)
             tapInstalled = false
@@ -75,18 +75,13 @@ final class AudioRecorder {
         let channelDataValue = channelData.pointee
         let channelDataCount = Int(buffer.frameLength)
 
-        var sum: Float = 0
-        for i in 0..<channelDataCount {
-            let sample = channelDataValue[i]
-            sum += sample * sample
-        }
-        let rms = sqrt(sum / Float(channelDataCount))
+        var sumOfSquares: Float = 0
+        vDSP_svesq(channelDataValue, 1, &sumOfSquares, vDSP_Length(channelDataCount))
+        let rms = sqrt(sumOfSquares / Float(channelDataCount))
         let normalizedRMS = min(1.0, rms * 20.0) // Scale up for visibility
 
-        DispatchQueue.main.async { [weak self] in
-            self?.rmsLevel = normalizedRMS
-            self?.onRMSUpdate?(normalizedRMS)
-        }
+        rmsLevel = normalizedRMS
+        onRMSUpdate?(normalizedRMS)
     }
 
     private func showMicPermissionAlert() {
