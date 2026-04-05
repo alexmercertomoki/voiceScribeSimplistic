@@ -70,6 +70,7 @@ Sources/VoiceScribe/
 | LLM Refinement | ✅ | ❌ |
 | Settings window | ✅ | ❌ |
 
-## License
+## Copyright
 
-MIT
+© Bilei Huang (CMU MISM | Ex-Google, Meta SWE)
+All rights reserved.
