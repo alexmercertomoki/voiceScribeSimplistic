@@ -43,7 +43,7 @@ build: $(SOURCES)
 
 ## Sign the app bundle (ad-hoc, no developer account needed)
 sign:
-	@printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>com.apple.security.device.audio-input</key>\n\t<true/>\n\t<key>com.apple.security.speech-recognition.limited</key>\n\t<true/>\n</dict>\n</plist>\n' > $(ENTITLEMENTS_FILE)
+	@printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>com.apple.security.device.audio-input</key>\n\t<true/>\n\t<key>com.apple.security.speech-recognition</key>\n\t<true/>\n</dict>\n</plist>\n' > $(ENTITLEMENTS_FILE)
 	@codesign --force --deep --sign - \
 		--entitlements $(ENTITLEMENTS_FILE) \
 		--preserve-metadata=identifier \
